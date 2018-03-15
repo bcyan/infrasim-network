@@ -211,7 +211,7 @@ class Topology(object):
         IP_ROUTE.close()
 
         self.logger_topo.info("[Setup portforward]")
-        InfrasimPortforward.build(self.__topo.get("portforward"), self.logger_topo)
+        InfrasimPortforward.build(self.__topo.get("portforward", {}), self.logger_topo)
 
     def delete(self):
         """
@@ -220,8 +220,6 @@ class Topology(object):
         """
         self.__load()
         InfrasimPortforward.clear(self.logger_topo)
-
-        self.__port_forward.clear()
 
         for _, ovs in self.__openvswitch.items():
             ovs.del_vswitch()
@@ -659,6 +657,7 @@ class InfrasimPortforward():
     call preinit first, then call forward one by one.
     """
 
+<<<<<<< fe473e33d0f962baf1334316f3210122d70abcb0
 <<<<<<< e445fff8f263307e67abb789c3dcb9a863031c3d
 <<<<<<< 99996b039eec411df756bc4d6c47aeb433221e39
     def __init__(self, port_forward, obj_logger):
