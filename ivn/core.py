@@ -14,8 +14,6 @@ from pyroute2 import IPDB
 from pyroute2 import netns
 from pyroute2.iproute import IPRoute
 
-
-
 IP_ROUTE = IPRoute()
 MAIN_IPDB = IPDB()
 
@@ -212,8 +210,8 @@ class Topology(object):
 
         IP_ROUTE.close()
 
-        print "[Setup portforward]"
-        InfrasimPortforward.build(self.__topo.get("portforward"))
+        self.logger_topo.info("[Setup portforward]")
+        InfrasimPortforward.build(self.__topo.get("portforward"), self.logger_topo)
 
     def delete(self):
         """
@@ -221,7 +219,7 @@ class Topology(object):
         resolved topology
         """
         self.__load()
-        InfrasimPortforward.clear()
+        InfrasimPortforward.clear(self.logger_topo)
 
         self.__port_forward.clear()
 
@@ -428,13 +426,10 @@ class InfrasimvSwitch(object):
             self.logger_topo.warning("vswitch {} doesn't exist so not delete it".format(self.name))
         else:
             self.del_all_ports()
-<<<<<<< 99996b039eec411df756bc4d6c47aeb433221e39
             _, port_str, _ = start_process(["ovs-vsctl", "list-ports", self.name])
             if port_str and port_str.split(" \n"):
                 self.logger_topo.info("vswitch {} still has port, so not delete it".format(self.name))
                 return
-=======
->>>>>>> implement port forward support
             if start_process(["ovs-vsctl", "del-br", self.name])[0]:
                 raise Exception("fail to delete vswitch {}".format(self.name))
             try:
@@ -479,15 +474,10 @@ class InfrasimvSwitch(object):
             self.logger_topo.error(outerr)
 
     def del_all_ports(self):
-<<<<<<< 99996b039eec411df756bc4d6c47aeb433221e39
         port_list = self.__vswitch_info["ports"]
         _, vir_port, _ = start_process(["ls", "/sys/devices/virtual/net"])
         vir_port_list = vir_port.split()
         port_list = set(vir_port_list).intersection(port_list)
-=======
-        _, port_str, _ = start_process(["ovs-vsctl", "list-ports", self.name])
-        port_list = port_str.split()
->>>>>>> implement port forward support
         for port in port_list:
             self.del_port(port)
 
@@ -669,6 +659,7 @@ class InfrasimPortforward():
     call preinit first, then call forward one by one.
     """
 
+<<<<<<< e445fff8f263307e67abb789c3dcb9a863031c3d
 <<<<<<< 99996b039eec411df756bc4d6c47aeb433221e39
     def __init__(self, port_forward, obj_logger):
         self.__rules = port_forward.get("rules", [])
@@ -728,32 +719,35 @@ class InfrasimPortforward():
         for rule in self.__iptables_rules:
             if self.__check_rule(rule):
                 self.__remove_rule(rule)
-=======
+
+    def __init__(self, obj_logger):
+        self.logger_topo = obj_logger
+
     def __preinit(self, io_interfaces):
         if len(io_interfaces) != 2:
-            print "Failed: please check io_interfacse!"
+            self.logger_topo.info("Failed: please check io_interfacse!")
             return
-        with open("/proc/sys/net/ipv4/ip_forward",'r') as f:
+        with open("/proc/sys/net/ipv4/ip_forward", 'r') as f:
             flag = f.read()
             if flag == "0":
-                print("Warning: port forwarding is disabled. ")
-                print("Please check /proc/sys/net/ipv4/ip_forward")
+                self.logger_topo.info("Warning: port forwarding is disabled. ")
+                self.logger_topo.info("Please check /proc/sys/net/ipv4/ip_forward")
         subprocess.call(["iptables", "-A", "FORWARD", "-i",
                          io_interfaces[0], "-o", io_interfaces[1], "-j", "ACCEPT"])
         subprocess.call(["iptables", "-A", "FORWARD", "-o",
                          io_interfaces[0], "-i", io_interfaces[1], "-j", "ACCEPT"])
 
     def __forward(self, src_ip, src_port, dst_port):
-        print "forwarding from {}:{} to host:{}".format(src_ip, src_port, dst_port)
-        subprocess.call(["iptables","-A","PREROUTING","-t","nat","-p","tcp","--dport",dst_port,"-j","DNAT","--to","{}:{}".format(src_ip, src_port)])
-        subprocess.call(["iptables","-t","nat","-A","POSTROUTING","-d",src_ip,"-p","tcp","--dport",src_port,"-j","MASQUERADE"])
+        self.logger_topo.info("forwarding from {}:{} to host:{}".format(src_ip, src_port, dst_port))
+        subprocess.call(["iptables", "-A", "PREROUTING", "-t", "nat", "-p", "tcp", "--dport", dst_port, "-j", "DNAT", "--to", "{}:{}".format(src_ip, src_port)])
+        subprocess.call(["iptables", "-t", "nat", "-A", "POSTROUTING", "-d", src_ip, "-p", "tcp", "--dport", src_port, "-j", "MASQUERADE"])
 
     @staticmethod
-    def build(portforward):
+    def build(portforward, logger):
         rules = portforward["rules"]
         io_interfaces = portforward["io_interfaces"]
         if rules and io_interfaces:
-            worker = InfrasimPortforward()
+            worker = InfrasimPortforward(logger)
             worker.__preinit(io_interfaces)
             for rule in rules:
                 arg = rule.split()
@@ -762,9 +756,9 @@ class InfrasimPortforward():
             # subprocess.call(["iptables","-t","nat","--line-number","-L"])
 
     @staticmethod
-    def clear():
+    def clear(logger):
+        logger.info("Clear all port forwarding setting.")
         subprocess.call(["iptables", "-P", "FORWARD", "DROP"])
         subprocess.call(["iptables", "-F", "FORWARD"])
         subprocess.call(["iptables", "-t", "nat", "-F", "PREROUTING"])
         subprocess.call(["iptables", "-t", "nat", "-F", "POSTROUTING"])
->>>>>>> implement port forward support
