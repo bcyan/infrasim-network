@@ -219,7 +219,8 @@ class Topology(object):
         resolved topology
         """
         self.__load()
-        InfrasimPortforward.clear(self.logger_topo)
+
+        self.__port_forward.clear()
 
         for _, ovs in self.__openvswitch.items():
             ovs.del_vswitch()
@@ -657,9 +658,6 @@ class InfrasimPortforward():
     call preinit first, then call forward one by one.
     """
 
-<<<<<<< fe473e33d0f962baf1334316f3210122d70abcb0
-<<<<<<< e445fff8f263307e67abb789c3dcb9a863031c3d
-<<<<<<< 99996b039eec411df756bc4d6c47aeb433221e39
     def __init__(self, port_forward, obj_logger):
         self.__rules = port_forward.get("rules", [])
         self.__io_interfaces = port_forward.get("io_interfaces", [])
@@ -731,33 +729,43 @@ class InfrasimPortforward():
             if flag == "0":
                 self.logger_topo.info("Warning: port forwarding is disabled. ")
                 self.logger_topo.info("Please check /proc/sys/net/ipv4/ip_forward")
-        subprocess.call(["iptables", "-A", "FORWARD", "-i",
-                         io_interfaces[0], "-o", io_interfaces[1], "-j", "ACCEPT"])
-        subprocess.call(["iptables", "-A", "FORWARD", "-o",
-                         io_interfaces[0], "-i", io_interfaces[1], "-j", "ACCEPT"])
 
-    def __forward(self, src_ip, src_port, dst_port):
-        self.logger_topo.info("forwarding from {}:{} to host:{}".format(src_ip, src_port, dst_port))
-        subprocess.call(["iptables", "-A", "PREROUTING", "-t", "nat", "-p", "tcp", "--dport", dst_port, "-j", "DNAT", "--to", "{}:{}".format(src_ip, src_port)])
-        subprocess.call(["iptables", "-t", "nat", "-A", "POSTROUTING", "-d", src_ip, "-p", "tcp", "--dport", src_port, "-j", "MASQUERADE"])
-
-    @staticmethod
-    def build(portforward, logger):
-        rules = portforward["rules"]
-        io_interfaces = portforward["io_interfaces"]
-        if rules and io_interfaces:
-            worker = InfrasimPortforward(logger)
-            worker.__preinit(io_interfaces)
-            for rule in rules:
+    def __build_rules(self):
+        if self.__rules:
+            for rule in self.__rules:
                 arg = rule.split()
-                worker.__forward(arg[0], arg[1], arg[2])
-            # list all rules.
-            # subprocess.call(["iptables","-t","nat","--line-number","-L"])
+                self.__iptables_rules.append(["PREROUTING", "-t", "nat", "-p", "tcp", "--dport", arg[2],
+                                   "-j", "DNAT", "--to", "{}:{}".format(arg[0], arg[1])])
+                self.__iptables_rules.append(["POSTROUTING", "-t", "nat", "-d", arg[0],
+                                    "-p", "tcp", "--dport", arg[1], "-j", "MASQUERADE"])
+        if self.__io_interfaces:
+            self.__iptables_rules.append(["FORWARD", "-i", self.__io_interfaces[0], "-o", self.__io_interfaces[1], "-j", "ACCEPT"])
+            self.__iptables_rules.append(["FORWARD", "-i", self.__io_interfaces[1], "-o", self.__io_interfaces[0], "-j", "ACCEPT"])
+            internal_ip = netifaces.ifaddresses(self.__io_interfaces[1])[netifaces.AF_INET][0]['addr']
+            self.__iptables_rules.append(["POSTROUTING", "-t", "nat", "-s", internal_ip + "/24",
+                                        "-o", self.__io_interfaces[0], "-j", "MASQUERADE"])
 
-    @staticmethod
-    def clear(logger):
-        logger.info("Clear all port forwarding setting.")
-        subprocess.call(["iptables", "-P", "FORWARD", "DROP"])
-        subprocess.call(["iptables", "-F", "FORWARD"])
-        subprocess.call(["iptables", "-t", "nat", "-F", "PREROUTING"])
-        subprocess.call(["iptables", "-t", "nat", "-F", "POSTROUTING"])
+    def __add_rule(self, rule):
+        header = ["iptables", "-A"]
+        subprocess.call(header + rule)
+
+    def __remove_rule(self, rule):
+        header = ["iptables", "-D"]
+        subprocess.call(header +rule)
+
+    def __check_rule(self, rule):
+        header = ["iptables", "-C"]
+        return start_process(header + rule)[0] == 0
+
+    def build(self):
+        self.__build_rules()
+        self.logger_topo.info("add rule for host iptables")
+        for rule in self.__iptables_rules:
+            self.__add_rule(rule)
+
+    def clear(self):
+        self.__build_rules()
+        self.logger_topo.info("delete rule for host iptables")
+        for rule in self.__iptables_rules:
+            if self.__check_rule(rule):
+                self.__remove_rule(rule)
